@@ -1,4 +1,4 @@
-# Sump Pump Pro — ESP32 + BMS BLE (Eco-Worthy/JBD) + LCD 16×2
+# Sump Pump Pro — ESP32 + BMS BLE (Eco-Worthy) + LCD 16×2
 
 Petit projet autonome basé sur ESP32 qui se connecte en Bluetooth Low Energy (BLE) au BMS Eco-Worthy et affiche en temps réel :
 
@@ -95,10 +95,10 @@ Si LCD est en 0x3F, remplacer `0x27` par `0x3F`.
    - Flash Size : *4MB (32Mb)*  
    - Upload Speed : *921600* (ou *115200* si câble limite)
 3. Croquis → Gérer les bibliothèques…  
-   - Installez LiquidCrystal_PCF8574.  
+   - Installer LiquidCrystal_PCF8574.  
    - Vérifier qu’il n’y a pas `ESP32_BLE_Arduino` (Kolban) dans `Documents/Arduino/libraries`.
-4. Collez le sketch.  
-5. Téléverser et ouvrez le Moniteur Série (115200).
+4. Coller le sketch.  
+5. Téléverser et ouvrer le Moniteur Série (115200).
 
 Attendu au boot :
 
@@ -141,7 +141,7 @@ snprintf(l1, sizeof(l1), "%5.1fV  %5.2fA", gV, gI);
 
 // Ligne 2 : SOC + W (valeur absolue par défaut)
 float P = gV * gI;
-// Remplacer fabsf(P) par P si vous voulez garder le signe (charge/décharge)
+// Remplacer fabsf(P) par P si désir de garder le signe (charge/décharge)
 snprintf(l2, sizeof(l2), "SOC:%3d%%  %4dW", gSOC, (int)lroundf(fabsf(P)));
 ```
 
@@ -152,7 +152,7 @@ Dans les parseurs, on utilise ÷100 (centi-unités) :
 V = mv / 100.0f;
 I = ma / 100.0f;
 ```
-Si votre firmware renvoie autre chose, adaptez (÷1000 pour milli-unités, etc.).
+Adapter (÷1000 pour milli-unités, etc.).
 
 Offset SOC
 
