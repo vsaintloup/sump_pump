@@ -120,17 +120,6 @@ SOC:  78%   150W
 
 ---
 
-## Comment récupérer la MAC BLE de la batterie ?
-
-Utiliser un scan BLE ou une app comme nRF Connect pour repérer :
-- Adresse BLE (ex. `a5:c2:37:5d:85:67`)
-- Nom (ex. `DP04S007L4S100A`)
-- (Optionnel) Service annoncé (ex. `0xFF00`)
-
-Sur Linux j’ai simplement utilisé **bluetoothctl** puis **scan on**.
-
----
-
 ## Ajustements utiles
 
 Affichage (UI)
