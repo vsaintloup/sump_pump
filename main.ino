@@ -5,6 +5,7 @@
 #include <vector>
 #include <algorithm>
 #include <math.h>
+#include <Adafruit_NeoPixel.h>
 
 // ===== CONFIG =====
 static const char* TARGET_BLE_MAC   = "a5:c2:37:5d:85:67"; // MAC BLE trouvée (insensible à la casse)
@@ -42,6 +43,27 @@ static unsigned long gLastPoll = 0;
 
 // Mesures affichage
 static volatile float gV=NAN, gI=NAN; static volatile int gSOC=-1; static volatile bool gHaveData=false;
+
+// ===== WS2812B (NeoPixel) =====
+#define LED_PIN   5           // <-- DATA sur GPIO 5
+#define LED_COUNT 1
+Adafruit_NeoPixel px(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
+
+// petite fonction de vague triangulaire (0..255) non bloquante
+static uint8_t triPulse(uint16_t period_ms, uint8_t minb, uint8_t maxb){
+  if(maxb <= minb) return minb;
+  uint32_t t = millis() % period_ms;
+  uint32_t half = period_ms / 2;
+  uint32_t val = (t < half) ? t : (period_ms - t);
+  return (uint8_t)(minb + (uint32_t)(maxb - minb) * val / half);
+}
+
+// applique couleur + brightness
+static void ledColor(uint8_t r, uint8_t g, uint8_t b, uint8_t br){
+  px.setBrightness(br);                // 0..255
+  px.setPixelColor(0, px.Color(r,g,b));
+  px.show();
+}
 
 // ===== Parsing trames =====
 static bool findFrameJBD(std::vector<uint8_t>& buf, std::vector<uint8_t>& out){
@@ -108,13 +130,13 @@ static bool setupSvcAndChars(BLEClient* cli){
 
   if(!gChrNotify || !gChrWrite) return false;
   if(!gChrNotify->canNotify())  return false;
-  // NOTE: renvoie void sur core 3.x -> pas de test bool
   gChrNotify->registerForNotify(notifyCB); 
   return true;
 }
 
 // ===== Connexion =====
 static bool connectDirectOrScan(){
+  static BLEClient* gClientLocal = nullptr;
   if(!gClient) gClient = BLEDevice::createClient();
 
   // 1) Tentative directe par MAC BLE
@@ -141,7 +163,7 @@ static bool connectDirectOrScan(){
     String n = d.haveName() ? String(d.getName().c_str()) : String("");
     if(n.length()>0 && n.indexOf(TARGET_NAME_HINT)>=0){
       Serial.printf("[SCAN] Match nom: %s (RSSI=%d)\n", d.getAddress().toString().c_str(), d.getRSSI());
-      if(gClient->connect(d.getAddress())){                 // <-- adresse (pas objet)
+      if(gClient->connect(d.getAddress())){
         Serial.println("[BLE] Connecte (scan/nom).");
         if(setupSvcAndChars(gClient)){ Serial.println("[BLE] Notifs OK"); gConnected=true; gLastPoll=0; return true; }
         Serial.println("[BLE] Services/Chars introuvables -> disconnect");
@@ -157,7 +179,7 @@ static bool connectDirectOrScan(){
     if(hasSvc){
       Serial.printf("[SCAN] Match service: %s (UUID=%s)\n",
                     d.getAddress().toString().c_str(), d.getServiceUUID().toString().c_str());
-      if(gClient->connect(d.getAddress())){                 // <-- adresse
+      if(gClient->connect(d.getAddress())){
         Serial.println("[BLE] Connecte (scan/uuid).");
         if(setupSvcAndChars(gClient)){ Serial.println("[BLE] Notifs OK"); gConnected=true; gLastPoll=0; return true; }
         Serial.println("[BLE] Services/Chars introuvables -> disconnect");
@@ -175,11 +197,41 @@ void setup(){
   Serial.begin(115200); delay(200);
   Wire.begin(21,22); lcd.begin(16,2); lcd.setBacklight(255); lcdBoot();
 
+  // LED
+  px.begin();
+  px.clear();
+  px.show();
+
   BLEDevice::init("ESP32-BMS");
   BLEDevice::setPower(ESP_PWR_LVL_P9);  // niveau TX max
 
   if(!connectDirectOrScan()){
     lcdBoot("Scan/Conn. echoue");
+  }
+}
+
+// met à jour l’état LED en continu (non bloquant)
+static void updateStatusLED(){
+  static unsigned long last = 0;
+  if(millis() - last < 20) return;  // ~50 Hz
+  last = millis();
+
+  bool connected = gConnected && gClient && gClient->isConnected();
+
+  // Si non connecté ou pas encore de data -> pulsation bleue lente
+  if(!connected || !gHaveData || isnan(gV) || isnan(gI)){
+    uint8_t br = triPulse(1600, 5, 40);    // lent, doux
+    ledColor(0, 0, 255, br);
+    return;
+  }
+
+  // Connecté avec data -> regarde la puissance "signée"
+  float Praw = gV * gI;   // >0 = charge, <0 = décharge (d’après ton BMS)
+  if(Praw > 5.0f){        // seuil 5 W pour éviter le papillonnement
+    uint8_t br = triPulse(500, 10, 200);   // pulsation rapide verte
+    ledColor(0, 255, 0, br);
+  } else {
+    ledColor(0, 255, 0, 38);               // vert fixe ~15% (38/255)
   }
 }
 
@@ -193,11 +245,12 @@ void loop(){
       connectDirectOrScan();
     }
     lcdPrintLine(1, "Scan en cours...");
+    updateStatusLED();
     delay(100);
     return;
   }
 
-  // Poll périodique (write) — certaines versions renvoient void -> on ignore le retour
+  // Poll périodique (write)
   if(gChrWrite){
     unsigned long now = millis();
     if(now - gLastPoll > POLL_MS){
@@ -224,5 +277,6 @@ void loop(){
     }
   }
 
+  updateStatusLED();
   delay(10);
 }
